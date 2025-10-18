@@ -1,0 +1,47 @@
+# Dependências
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Ambiente (NUNCA envie senhas do .env!)
+.env
+.env.local
+.env.*.local
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Editor de código
+.vscode/
+.idea/
+*.swp
+
+# Build / compilados
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+
+# Banco de dados (se local)
+*.sqlite
+*.db
+*.db-journal
+
+# Uploads temporários
+uploads/
+temp/
+tmp/
+
+# PM2 ou outros gerenciadores
+pids
+*.pid
+*.seed
+*.pid.lock
