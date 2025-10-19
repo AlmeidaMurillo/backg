@@ -320,6 +320,9 @@ app.get("/validar-token", (req, res) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
+  console.log("Token recebido:", token);
+  console.log("JWT_SECRET atual:", process.env.JWT_SECRET);
+
   if (!token) {
     return res.json({ valido: false });
   }
@@ -330,9 +333,11 @@ app.get("/validar-token", (req, res) => {
       return res.json({ valido: false });
     }
 
+    console.log("Token válido para usuário:", user);
     res.json({ valido: true, usuario: user });
   });
 });
+
 
 
 app.put("/caixinha", autenticar, async (req, res) => {
