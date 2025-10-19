@@ -316,13 +316,24 @@ app.get("/caixinha/total", autenticar, async (req, res) => {
   }
 });
 
-app.get("/validar-token", autenticar, (req, res) => {
-  try {
-    res.json({ valido: true, usuario: req.user });
-  } catch {
-    res.json({ valido: false });
+app.get("/validar-token", (req, res) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (!token) {
+    return res.json({ valido: false });
   }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      console.log("Token inválido:", err.message);
+      return res.json({ valido: false });
+    }
+
+    res.json({ valido: true, usuario: user });
+  });
 });
+
 
 app.put("/caixinha", autenticar, async (req, res) => {
   try {
