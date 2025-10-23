@@ -9,11 +9,13 @@ const cron = require("node-cron");
 dotenv.config();
 const app = express();
 app.use(express.json());
-app.use(cors({
-  origin: "*", 
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -82,7 +84,6 @@ async function atualizarParcelasAtrasadas() {
   }
 }
 
-
 cron.schedule("1 0 * * *", () => {
   atualizarParcelasAtrasadas();
 });
@@ -99,12 +100,21 @@ async function atualizarParcelasMiddleware(req, res, next) {
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   try {
-    const [rows] = await pool.query("SELECT * FROM usuarios WHERE username = ?", [username]);
-    if (rows.length === 0) return res.status(400).json({ error: "Usuário ou senha inválidos" });
+    const [rows] = await pool.query(
+      "SELECT * FROM usuarios WHERE username = ?",
+      [username]
+    );
+    if (rows.length === 0)
+      return res.status(400).json({ error: "Usuário ou senha inválidos" });
     const user = rows[0];
     const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) return res.status(400).json({ error: "Usuário ou senha inválidos" });
-    const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: "1d" });
+    if (!isValid)
+      return res.status(400).json({ error: "Usuário ou senha inválidos" });
+    const token = jwt.sign(
+      { id: user.id, username: user.username },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
     res.json({ token });
   } catch (err) {
     res.status(500).json({ error: "Erro no servidor" });
@@ -131,7 +141,9 @@ app.post("/clientes", autenticar, async (req, res) => {
     );
 
     if (existe.length > 0) {
-      return res.status(400).json({ error: "Já existe um cliente com esse nome." });
+      return res
+        .status(400)
+        .json({ error: "Já existe um cliente com esse nome." });
     }
 
     const [result] = await pool.query(
@@ -153,12 +165,25 @@ app.post("/clientes", autenticar, async (req, res) => {
     );
 
     const total_emprestimos_feitos = emprestimos.length;
-    const emprestimos_pendentes = emprestimos.filter(e => e.statos === "pendente").length;
-    const emprestimos_pagos = emprestimos.filter(e => e.statos === "pago").length;
-    const total_valor_emprestado = emprestimos.reduce((acc, e) => acc + Number(e.valoremprestado), 0);
-    const lucro_total = emprestimos.reduce((acc, e) => acc + (Number(e.valorpagar) - Number(e.valoremprestado)), 0);
-    const maior_valor_emprestado = emprestimos.reduce((acc, e) => Math.max(acc, Number(e.valoremprestado)), 0);
-    const atrasos = emprestimos.filter(e => e.statos === "atrasado").length;
+    const emprestimos_pendentes = emprestimos.filter(
+      (e) => e.statos === "pendente"
+    ).length;
+    const emprestimos_pagos = emprestimos.filter(
+      (e) => e.statos === "pago"
+    ).length;
+    const total_valor_emprestado = emprestimos.reduce(
+      (acc, e) => acc + Number(e.valoremprestado),
+      0
+    );
+    const lucro_total = emprestimos.reduce(
+      (acc, e) => acc + (Number(e.valorpagar) - Number(e.valoremprestado)),
+      0
+    );
+    const maior_valor_emprestado = emprestimos.reduce(
+      (acc, e) => Math.max(acc, Number(e.valoremprestado)),
+      0
+    );
+    const atrasos = emprestimos.filter((e) => e.statos === "atrasado").length;
 
     res.json({
       ...cliente,
@@ -168,9 +193,8 @@ app.post("/clientes", autenticar, async (req, res) => {
       total_valor_emprestado,
       lucro_total,
       maior_valor_emprestado,
-      atrasos
+      atrasos,
     });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao cadastrar cliente" });
@@ -207,7 +231,6 @@ app.put("/obs/:id", autenticar, async (req, res) => {
   }
 });
 
-
 app.put("/clientes/:id", autenticar, async (req, res) => {
   const { id } = req.params;
   const { nome, telefone, endereco, indicado, obs } = req.body;
@@ -226,7 +249,6 @@ app.put("/clientes/:id", autenticar, async (req, res) => {
     res.status(500).json({ error: "Erro ao editar cliente" });
   }
 });
-
 
 app.delete("/clientes/:id", autenticar, async (req, res) => {
   const { id } = req.params;
@@ -252,21 +274,21 @@ app.delete("/clientes/:id", autenticar, async (req, res) => {
       const emprestimosIds = emprestimos.map((e) => e.id);
 
       await pool.query(
-        `DELETE FROM parcelas WHERE id_emprestimo IN (${emprestimosIds.join(",")})`
+        `DELETE FROM parcelas WHERE id_emprestimo IN (${emprestimosIds.join(
+          ","
+        )})`
       );
 
-      await pool.query(
-        "DELETE FROM emprestimos WHERE cliente = ?",
-        [nomeCliente]
-      );
+      await pool.query("DELETE FROM emprestimos WHERE cliente = ?", [
+        nomeCliente,
+      ]);
     }
 
-    await pool.query(
-      "DELETE FROM clientes WHERE id = ?",
-      [id]
-    );
+    await pool.query("DELETE FROM clientes WHERE id = ?", [id]);
 
-    res.json({ message: "Cliente e todos os empréstimos/parcelas removidos com sucesso!" });
+    res.json({
+      message: "Cliente e todos os empréstimos/parcelas removidos com sucesso!",
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao apagar cliente" });
@@ -295,24 +317,31 @@ app.get("/emprestimos/quantidade", autenticar, async (req, res) => {
   }
 });
 
-app.get("/emprestimos/ematraso", autenticar, atualizarParcelasMiddleware, async (req, res) => {
-  try {
-    const [result] = await pool.query(`
+app.get(
+  "/emprestimos/ematraso",
+  autenticar,
+  atualizarParcelasMiddleware,
+  async (req, res) => {
+    try {
+      const [result] = await pool.query(`
       SELECT COUNT(DISTINCT p.id_emprestimo) AS total
       FROM parcelas p
       WHERE p.status = 'Atrasada'
     `);
 
-    res.json({ totalEmprestimosAtrasados: result[0].total });
-  } catch (err) {
-    console.error("Erro ao buscar empréstimos em atraso:", err);
-    res.status(500).json({ error: "Erro ao buscar empréstimos em atraso" });
+      res.json({ totalEmprestimosAtrasados: result[0].total });
+    } catch (err) {
+      console.error("Erro ao buscar empréstimos em atraso:", err);
+      res.status(500).json({ error: "Erro ao buscar empréstimos em atraso" });
+    }
   }
-});
+);
 
 app.get("/caixinha/total", autenticar, async (req, res) => {
   try {
-    const [rows] = await pool.query("SELECT SUM(valor) AS totalCaixinha FROM caixinha");
+    const [rows] = await pool.query(
+      "SELECT SUM(valor) AS totalCaixinha FROM caixinha"
+    );
     const total = rows[0].totalCaixinha || 0;
     res.json({ totalCaixinha: total });
   } catch (err) {
@@ -323,9 +352,6 @@ app.get("/caixinha/total", autenticar, async (req, res) => {
 app.get("/validar-token", (req, res) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
-
-  console.log("Token recebido:", token);
-  console.log("JWT_SECRET atual:", process.env.JWT_SECRET);
 
   if (!token) {
     return res.json({ valido: false });
@@ -341,8 +367,6 @@ app.get("/validar-token", (req, res) => {
     res.json({ valido: true, usuario: user });
   });
 });
-
-
 
 app.put("/caixinha", autenticar, async (req, res) => {
   try {
@@ -372,9 +396,22 @@ app.put("/caixinha", autenticar, async (req, res) => {
 
 app.put("/emprestimos/:id", autenticar, async (req, res) => {
   const { id } = req.params;
-  const { cliente, valoremprestado, valorpagar, parcelas, dataemprestimo, obs } = req.body;
+  const {
+    cliente,
+    valoremprestado,
+    valorpagar,
+    parcelas,
+    dataemprestimo,
+    obs,
+  } = req.body;
 
-  if (!cliente || !valoremprestado || !valorpagar || !parcelas || !dataemprestimo) {
+  if (
+    !cliente ||
+    !valoremprestado ||
+    !valorpagar ||
+    !parcelas ||
+    !dataemprestimo
+  ) {
     return res.status(400).json({ error: "Todos os campos são obrigatórios." });
   }
 
@@ -411,7 +448,15 @@ app.put("/emprestimos/:id", autenticar, async (req, res) => {
          dataemprestimo = ?, 
          obs = ? 
        WHERE id = ?`,
-      [cliente, valoremprestado, valorpagar, parcelas, dataemprestimo, obs || "", id]
+      [
+        cliente,
+        valoremprestado,
+        valorpagar,
+        parcelas,
+        dataemprestimo,
+        obs || "",
+        id,
+      ]
     );
 
     const valorParcela = parseFloat(valorpagar) / parseInt(parcelas);
@@ -425,7 +470,7 @@ app.put("/emprestimos/:id", autenticar, async (req, res) => {
       const parcelasParaRemover = numeroParcelasAntigo - parcelas;
       const ultimasParcelas = parcelasExistentes
         .slice(-parcelasParaRemover)
-        .map(p => p.id);
+        .map((p) => p.id);
 
       if (ultimasParcelas.length > 0) {
         await pool.query(
@@ -452,7 +497,7 @@ app.put("/emprestimos/:id", autenticar, async (req, res) => {
               valorParcela.toFixed(2),
               dataVencimento.toISOString().split("T")[0],
               null,
-              "Pendente"
+              "Pendente",
             ]
           )
         );
@@ -465,10 +510,10 @@ app.put("/emprestimos/:id", autenticar, async (req, res) => {
       [id]
     );
 
-    const updatePromises = parcelasParaAtualizar[0].map(p =>
+    const updatePromises = parcelasParaAtualizar[0].map((p) =>
       pool.query("UPDATE parcelas SET valor_parcela = ? WHERE id = ?", [
         valorParcela.toFixed(2),
-        p.id
+        p.id,
       ])
     );
 
@@ -487,8 +532,6 @@ app.put("/emprestimos/:id", autenticar, async (req, res) => {
     res.status(500).json({ error: "Erro ao atualizar empréstimo." });
   }
 });
-
-
 
 app.get("/emprestimos/pagos", autenticar, async (req, res) => {
   try {
@@ -509,7 +552,6 @@ app.patch("/emprestimos/:id/pago", autenticar, async (req, res) => {
   const { id } = req.params;
 
   try {
-
     const [naoPagas] = await pool.query(
       `SELECT COUNT(*) AS qtd 
        FROM parcelas 
@@ -520,7 +562,8 @@ app.patch("/emprestimos/:id/pago", autenticar, async (req, res) => {
 
     if (naoPagas[0].qtd > 0) {
       return res.status(400).json({
-        error: "Ainda existem parcelas pendentes ou atrasadas. Quite todas antes de finalizar o empréstimo.",
+        error:
+          "Ainda existem parcelas pendentes ou atrasadas. Quite todas antes de finalizar o empréstimo.",
       });
     }
 
@@ -531,33 +574,54 @@ app.patch("/emprestimos/:id/pago", autenticar, async (req, res) => {
       [id]
     );
 
-    res.json({ success: true, message: "Empréstimo marcado como Pago com sucesso." });
+    res.json({
+      success: true,
+      message: "Empréstimo marcado como Pago com sucesso.",
+    });
   } catch (err) {
     console.error("Erro ao marcar empréstimo como pago:", err);
     res.status(500).json({ error: "Erro ao marcar empréstimo como pago." });
   }
 });
 
-app.get("/emprestimos", autenticar, atualizarParcelasMiddleware, async (req, res) => {
-  try {
-    const [emprestimos] = await pool.query(
-      `SELECT e.*, e.obs AS observacoes, c.id AS id_cliente
+app.get(
+  "/emprestimos",
+  autenticar,
+  atualizarParcelasMiddleware,
+  async (req, res) => {
+    try {
+      const [emprestimos] = await pool.query(
+        `SELECT e.*, e.obs AS observacoes, c.id AS id_cliente
        FROM emprestimos e
        JOIN clientes c ON e.cliente = c.nome
        WHERE e.statos IN ('Pendente', 'Em Atraso')
        ORDER BY e.id DESC`
-    );
-    res.json(emprestimos);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao buscar empréstimos." });
+      );
+      res.json(emprestimos);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Erro ao buscar empréstimos." });
+    }
   }
-});
+);
 
 app.post("/emprestimos", autenticar, async (req, res) => {
-  const { cliente, valoremprestado, valorpagar, parcelas, dataemprestimo, obs } = req.body;
+  const {
+    cliente,
+    valoremprestado,
+    valorpagar,
+    parcelas,
+    dataemprestimo,
+    obs,
+  } = req.body;
 
-  if (!cliente || !valoremprestado || !valorpagar || !parcelas || !dataemprestimo) {
+  if (
+    !cliente ||
+    !valoremprestado ||
+    !valorpagar ||
+    !parcelas ||
+    !dataemprestimo
+  ) {
     return res.status(400).json({ error: "Todos os campos são obrigatórios." });
   }
 
@@ -580,7 +644,15 @@ app.post("/emprestimos", autenticar, async (req, res) => {
     const [result] = await pool.query(
       `INSERT INTO emprestimos (cliente, valoremprestado, valorpagar, parcelas, dataemprestimo, obs, statos)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [cliente, valoremprestado, valorpagar, parcelas, dataemprestimo, obs || "", statusEmprestimo]
+      [
+        cliente,
+        valoremprestado,
+        valorpagar,
+        parcelas,
+        dataemprestimo,
+        obs || "",
+        statusEmprestimo,
+      ]
     );
 
     const emprestimoId = result.insertId;
@@ -597,7 +669,13 @@ app.post("/emprestimos", autenticar, async (req, res) => {
         pool.query(
           `INSERT INTO parcelas (id_emprestimo, numero_parcela, valor_parcela, data_vencimento, status)
            VALUES (?, ?, ?, ?, ?)`,
-          [emprestimoId, i, valorParcela.toFixed(2), dataVencimento.toISOString().split("T")[0], statusParcela]
+          [
+            emprestimoId,
+            i,
+            valorParcela.toFixed(2),
+            dataVencimento.toISOString().split("T")[0],
+            statusParcela,
+          ]
         )
       );
     }
@@ -609,10 +687,14 @@ app.post("/emprestimos", autenticar, async (req, res) => {
       [emprestimoId]
     );
     if (temAtraso[0].qtd > 0) {
-      await pool.query(`UPDATE emprestimos SET statos = 'Em Atraso' WHERE id = ?`, [emprestimoId]);
+      await pool.query(
+        `UPDATE emprestimos SET statos = 'Em Atraso' WHERE id = ?`,
+        [emprestimoId]
+      );
     }
 
-    await pool.query(`
+    await pool.query(
+      `
       UPDATE clientes c
       SET
         total_emprestimos_feitos = (SELECT COUNT(*) FROM emprestimos e WHERE e.cliente = c.nome),
@@ -645,7 +727,9 @@ app.post("/emprestimos", autenticar, async (req, res) => {
             AND p.data_vencimento < NOW()
         )
       WHERE c.id = ?
-    `, [clienteId]);
+    `,
+      [clienteId]
+    );
 
     const [novoEmprestimo] = await pool.query(
       "SELECT * FROM emprestimos WHERE id = ?",
@@ -653,20 +737,18 @@ app.post("/emprestimos", autenticar, async (req, res) => {
     );
 
     res.json(novoEmprestimo[0]);
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao criar empréstimo." });
   }
 });
 
-
-
 app.get("/clientes/stats/:id", autenticar, async (req, res) => {
   const clienteId = req.params.id;
 
   try {
-    const [stats] = await pool.query(`
+    const [stats] = await pool.query(
+      `
       SELECT 
         c.id,
         c.nome,
@@ -701,17 +783,20 @@ app.get("/clientes/stats/:id", autenticar, async (req, res) => {
 
         -- Empréstimos atrasados (conta empréstimos com ao menos uma parcela vencida)
         (
-          SELECT COUNT(DISTINCT e.id)
+          SELECT COUNT(p.id)
           FROM emprestimos e
           JOIN parcelas p ON e.id = p.id_emprestimo
           WHERE e.cliente = c.nome
-            AND p.status = 'Atrasada'
-            AND p.data_vencimento < NOW()
+          AND p.status = 'Atrasada'
+          AND p.data_vencimento < NOW()
         ) AS emprestimos_atrasados
+
 
       FROM clientes c
       WHERE c.id = ?
-    `, [clienteId]);
+    `,
+      [clienteId]
+    );
 
     if (stats.length === 0) {
       return res.status(404).json({ error: "Cliente não encontrado." });
@@ -723,7 +808,6 @@ app.get("/clientes/stats/:id", autenticar, async (req, res) => {
     res.status(500).json({ error: "Erro ao buscar estatísticas do cliente." });
   }
 });
-
 
 app.get("/emprestimos/:id/proximasParcelas", async (req, res) => {
   const id = req.params.id;
@@ -741,36 +825,42 @@ app.get("/emprestimos/:id/proximasParcelas", async (req, res) => {
   }
 });
 
-
-app.get("/emprestimos/juros", autenticar, atualizarParcelasMiddleware, async (req, res) => {
-  try {
-    const [emprestimos] = await pool.query(
-      `SELECT e.id, e.cliente, e.valoremprestado, e.valorpagar,
+app.get(
+  "/emprestimos/juros",
+  autenticar,
+  atualizarParcelasMiddleware,
+  async (req, res) => {
+    try {
+      const [emprestimos] = await pool.query(
+        `SELECT e.id, e.cliente, e.valoremprestado, e.valorpagar,
               c.id AS id_cliente
        FROM emprestimos e
        JOIN clientes c ON e.cliente = c.nome
        ORDER BY e.id DESC`
-    );
+      );
 
-    const emprestimosComJuros = emprestimos.map((e) => {
-      const valorEmprestado = parseFloat(e.valoremprestado);
-      const valorPagar = parseFloat(e.valorpagar);
-      const juros = valorPagar - valorEmprestado;
-      const porcentagem = (juros / valorEmprestado) * 100;
+      const emprestimosComJuros = emprestimos.map((e) => {
+        const valorEmprestado = parseFloat(e.valoremprestado);
+        const valorPagar = parseFloat(e.valorpagar);
+        const juros = valorPagar - valorEmprestado;
+        const porcentagem = (juros / valorEmprestado) * 100;
 
-      return {
-        ...e,
-        juros: juros.toFixed(2),
-        porcentagem: porcentagem.toFixed(2) + "%",
-      };
-    });
+        return {
+          ...e,
+          juros: juros.toFixed(2),
+          porcentagem: porcentagem.toFixed(2) + "%",
+        };
+      });
 
-    res.json(emprestimosComJuros);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao calcular juros dos empréstimos." });
+      res.json(emprestimosComJuros);
+    } catch (err) {
+      console.error(err);
+      res
+        .status(500)
+        .json({ error: "Erro ao calcular juros dos empréstimos." });
+    }
   }
-});
+);
 
 app.get("/emprestimos/resumo/:id", autenticar, async (req, res) => {
   const emprestimoId = req.params.id;
@@ -792,19 +882,26 @@ app.get("/emprestimos/resumo/:id", autenticar, async (req, res) => {
       [emprestimoId]
     );
 
-    const parcelasPagas = parcelas.filter(p => p.status === "Pago").length;
-    const parcelasPendentes = parcelas.filter(p => p.status === "Pendente").length;
-    const parcelasAtrasadas = parcelas.filter(p => p.status === "Atrasada").length;
-    const valorParcela = parcelas.length > 0 ? parseFloat(parcelas[0].valor_parcela) : 0;
+    const parcelasPagas = parcelas.filter((p) => p.status === "Pago").length;
+    const parcelasPendentes = parcelas.filter(
+      (p) => p.status === "Pendente"
+    ).length;
+    const parcelasAtrasadas = parcelas.filter(
+      (p) => p.status === "Atrasada"
+    ).length;
+    const valorParcela =
+      parcelas.length > 0 ? parseFloat(parcelas[0].valor_parcela) : 0;
     const valorJaPago = parcelas
-      .filter(p => p.status === "Pago")
+      .filter((p) => p.status === "Pago")
       .reduce((acc, p) => acc + parseFloat(p.valor_parcela), 0);
     const valorPendente = parcelas
-      .filter(p => p.status === "Pendente")
+      .filter((p) => p.status === "Pendente")
       .reduce((acc, p) => acc + parseFloat(p.valor_parcela), 0);
 
-    const proximoVencimentoObj = parcelas.find(p => p.status === "Pendente");
-    const proximoVencimento = proximoVencimentoObj ? proximoVencimentoObj.data_vencimento : null;
+    const proximoVencimentoObj = parcelas.find((p) => p.status === "Pendente");
+    const proximoVencimento = proximoVencimentoObj
+      ? proximoVencimentoObj.data_vencimento
+      : null;
 
     res.json({
       parcelasPagas,
@@ -813,7 +910,7 @@ app.get("/emprestimos/resumo/:id", autenticar, async (req, res) => {
       valorParcela: valorParcela.toFixed(2),
       valorJaPago: valorJaPago.toFixed(2),
       valorPendente: valorPendente.toFixed(2),
-      proximoVencimento
+      proximoVencimento,
     });
   } catch (err) {
     console.error(err);
@@ -821,34 +918,39 @@ app.get("/emprestimos/resumo/:id", autenticar, async (req, res) => {
   }
 });
 
-app.get("/parcelas", autenticar, atualizarParcelasMiddleware, async (req, res) => {
-  const { id_emprestimo, cliente } = req.query;
-  try {
-    let query = `
+app.get(
+  "/parcelas",
+  autenticar,
+  atualizarParcelasMiddleware,
+  async (req, res) => {
+    const { id_emprestimo, cliente } = req.query;
+    try {
+      let query = `
       SELECT p.id, p.id_emprestimo, p.numero_parcela, p.valor_parcela, p.data_vencimento, p.data_pagamento, p.status,
              e.cliente, e.parcelas AS total_parcelas
       FROM parcelas p
       JOIN emprestimos e ON p.id_emprestimo = e.id
       WHERE 1=1
     `;
-    const params = [];
-    if (id_emprestimo) {
-      query += " AND p.id_emprestimo = ?";
-      params.push(id_emprestimo);
-    }
-    if (cliente) {
-      query += " AND e.cliente = ?";
-      params.push(cliente);
-    }
-    query += " ORDER BY p.numero_parcela ASC";
+      const params = [];
+      if (id_emprestimo) {
+        query += " AND p.id_emprestimo = ?";
+        params.push(id_emprestimo);
+      }
+      if (cliente) {
+        query += " AND e.cliente = ?";
+        params.push(cliente);
+      }
+      query += " ORDER BY p.numero_parcela ASC";
 
-    const [parcelas] = await pool.query(query, params);
-    res.json(parcelas);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao buscar parcelas." });
+      const [parcelas] = await pool.query(query, params);
+      res.json(parcelas);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Erro ao buscar parcelas." });
+    }
   }
-});
+);
 
 app.get("/resumo-mensal/:ano/:mes", autenticar, async (req, res) => {
   const { ano, mes } = req.params;
@@ -942,7 +1044,8 @@ app.patch("/parcelas/:idParcela/status", autenticar, async (req, res) => {
       "SELECT id_emprestimo FROM parcelas WHERE id = ?",
       [idParcela]
     );
-    if (parcela.length === 0) return res.status(404).json({ error: "Parcela não encontrada." });
+    if (parcela.length === 0)
+      return res.status(404).json({ error: "Parcela não encontrada." });
 
     const idEmprestimo = parcela[0].id_emprestimo;
 
@@ -952,14 +1055,14 @@ app.patch("/parcelas/:idParcela/status", autenticar, async (req, res) => {
     );
 
     let novoStatusEmprestimo = "Pendente";
-    if (parcelasEmprestimo.some(p => p.status === "Atrasada")) {
+    if (parcelasEmprestimo.some((p) => p.status === "Atrasada")) {
       novoStatusEmprestimo = "Em Atraso";
     }
 
-    await pool.query(
-      "UPDATE emprestimos SET statos = ? WHERE id = ?",
-      [novoStatusEmprestimo, idEmprestimo]
-    );
+    await pool.query("UPDATE emprestimos SET statos = ? WHERE id = ?", [
+      novoStatusEmprestimo,
+      idEmprestimo,
+    ]);
 
     const [emprestimo] = await pool.query(
       "SELECT cliente, valorpagar, valoremprestado, parcelas FROM emprestimos WHERE id = ?",
@@ -987,7 +1090,10 @@ app.patch("/parcelas/:idParcela/status", autenticar, async (req, res) => {
           "UPDATE clientes SET lucro_total = lucro_total + ? WHERE id = ?",
           [lucroParcela, cliente]
         );
-      } else if (statusAtualizadoParcela === "Pendente" || statusAtualizadoParcela === "Atrasada") {
+      } else if (
+        statusAtualizadoParcela === "Pendente" ||
+        statusAtualizadoParcela === "Atrasada"
+      ) {
         await pool.query(
           "UPDATE clientes SET lucro_total = GREATEST(lucro_total - ?, 0) WHERE id = ?",
           [lucroParcela, cliente]
@@ -996,9 +1102,10 @@ app.patch("/parcelas/:idParcela/status", autenticar, async (req, res) => {
     }
 
     res.json({
-      message: "Parcela, status do empréstimo e cliente atualizados com sucesso.",
+      message:
+        "Parcela, status do empréstimo e cliente atualizados com sucesso.",
       statusParcela: statusAtualizadoParcela,
-      statusEmprestimo: novoStatusEmprestimo
+      statusEmprestimo: novoStatusEmprestimo,
     });
   } catch (err) {
     console.error(err);
@@ -1035,35 +1142,54 @@ app.delete("/emprestimos/:id", autenticar, async (req, res) => {
       [id]
     );
 
-    const parcelasPagas = parcelas.filter(p => p.status === "Pago").length;
+    const parcelasPagas = parcelas.filter((p) => p.status === "Pago").length;
 
-    const lucroPorParcela = (emprestimo.valorpagar - emprestimo.valoremprestado) / emprestimo.parcelas;
+    const lucroPorParcela =
+      (emprestimo.valorpagar - emprestimo.valoremprestado) /
+      emprestimo.parcelas;
 
     const lucroGerado = lucroPorParcela * parcelasPagas;
 
     let novosValores = {
-      total_emprestimos_feitos: Math.max(cliente.total_emprestimos_feitos - 1, 0),
-      total_valor_emprestado: Math.max(cliente.total_valor_emprestado - emprestimo.valoremprestado, 0),
+      total_emprestimos_feitos: Math.max(
+        cliente.total_emprestimos_feitos - 1,
+        0
+      ),
+      total_valor_emprestado: Math.max(
+        cliente.total_valor_emprestado - emprestimo.valoremprestado,
+        0
+      ),
       emprestimos_pendentes: cliente.emprestimos_pendentes,
       emprestimos_pagos: cliente.emprestimos_pagos,
       emprestimos_atrasados: cliente.emprestimos_atrasados,
       atrasos: cliente.atrasos,
       lucro_total: Math.max(cliente.lucro_total - lucroGerado, 0),
-      maior_valor_emprestado: cliente.maior_valor_emprestado
+      maior_valor_emprestado: cliente.maior_valor_emprestado,
     };
 
     if (emprestimo.statos === "Pendente" || emprestimo.statos === "Em Atraso") {
-      novosValores.emprestimos_pendentes = Math.max(cliente.emprestimos_pendentes - 1, 0);
+      novosValores.emprestimos_pendentes = Math.max(
+        cliente.emprestimos_pendentes - 1,
+        0
+      );
     }
 
     if (emprestimo.statos === "Pago") {
-      novosValores.emprestimos_pagos = Math.max(cliente.emprestimos_pagos - 1, 0);
+      novosValores.emprestimos_pagos = Math.max(
+        cliente.emprestimos_pagos - 1,
+        0
+      );
     }
 
-    const parcelasAtrasadas = parcelas.filter(p => p.status === "Atrasada").length;
+    const parcelasAtrasadas = parcelas.filter(
+      (p) => p.status === "Atrasada"
+    ).length;
     if (parcelasAtrasadas > 0) {
       novosValores.atrasos = Math.max(cliente.atrasos - parcelasAtrasadas, 0);
-      novosValores.emprestimos_atrasados = Math.max(cliente.emprestimos_atrasados - 1, 0);
+      novosValores.emprestimos_atrasados = Math.max(
+        cliente.emprestimos_atrasados - 1,
+        0
+      );
     }
 
     if (emprestimo.valoremprestado === cliente.maior_valor_emprestado) {
@@ -1094,7 +1220,7 @@ app.delete("/emprestimos/:id", autenticar, async (req, res) => {
         novosValores.lucro_total,
         novosValores.atrasos,
         novosValores.maior_valor_emprestado,
-        cliente.id
+        cliente.id,
       ]
     );
 
@@ -1103,7 +1229,7 @@ app.delete("/emprestimos/:id", autenticar, async (req, res) => {
 
     res.json({
       success: true,
-      message: "Empréstimo removido e cliente atualizado com sucesso."
+      message: "Empréstimo removido e cliente atualizado com sucesso.",
     });
   } catch (err) {
     console.error("Erro ao apagar empréstimo:", err);
@@ -1111,31 +1237,36 @@ app.delete("/emprestimos/:id", autenticar, async (req, res) => {
   }
 });
 
-
-
-
-
-app.get("/parcelas/hoje", autenticar, atualizarParcelasMiddleware, async (req, res) => {
-  try {
-    const [parcelas] = await pool.query(
-      `SELECT p.*, e.cliente, e.parcelas AS totalParcelas
+app.get(
+  "/parcelas/hoje",
+  autenticar,
+  atualizarParcelasMiddleware,
+  async (req, res) => {
+    try {
+      const [parcelas] = await pool.query(
+        `SELECT p.*, e.cliente, e.parcelas AS totalParcelas
        FROM parcelas p
        JOIN emprestimos e ON e.id = p.id_emprestimo
        WHERE DATE(p.data_vencimento) = CURDATE() AND p.status != 'Pago'
        ORDER BY p.data_vencimento ASC`
-    );
+      );
 
-    res.json(parcelas);
-  } catch (err) {
-    console.error("Erro ao buscar parcelas de hoje:", err);
-    res.status(500).json({ error: "Erro ao buscar parcelas de hoje" });
+      res.json(parcelas);
+    } catch (err) {
+      console.error("Erro ao buscar parcelas de hoje:", err);
+      res.status(500).json({ error: "Erro ao buscar parcelas de hoje" });
+    }
   }
-});
+);
 
-app.get("/parcelas/mes", autenticar, atualizarParcelasMiddleware, async (req, res) => {
-  try {
-    const [parcelas] = await pool.query(
-      `SELECT p.*, e.cliente, e.parcelas AS totalParcelas
+app.get(
+  "/parcelas/mes",
+  autenticar,
+  atualizarParcelasMiddleware,
+  async (req, res) => {
+    try {
+      const [parcelas] = await pool.query(
+        `SELECT p.*, e.cliente, e.parcelas AS totalParcelas
        FROM parcelas p
        JOIN emprestimos e ON e.id = p.id_emprestimo
        WHERE p.status != 'Pago' 
@@ -1143,64 +1274,84 @@ app.get("/parcelas/mes", autenticar, atualizarParcelasMiddleware, async (req, re
          AND YEAR(p.data_vencimento) = YEAR(CURDATE())
          AND p.data_vencimento >= CURDATE()
        ORDER BY p.data_vencimento ASC`
-    );
+      );
 
-    res.json(parcelas);
-  } catch (err) {
-    console.error("Erro ao buscar parcelas do mês:", err);
-    res.status(500).json({ error: "Erro ao buscar parcelas do mês" });
+      res.json(parcelas);
+    } catch (err) {
+      console.error("Erro ao buscar parcelas do mês:", err);
+      res.status(500).json({ error: "Erro ao buscar parcelas do mês" });
+    }
   }
-});
+);
 
-app.get("/parcelas/atrasadas", autenticar, atualizarParcelasMiddleware, async (req, res) => {
-  try {
-    const [parcelas] = await pool.query(
-      `SELECT p.*, e.cliente, e.parcelas AS totalParcelas
+app.get(
+  "/parcelas/atrasadas",
+  autenticar,
+  atualizarParcelasMiddleware,
+  async (req, res) => {
+    try {
+      const [parcelas] = await pool.query(
+        `SELECT p.*, e.cliente, e.parcelas AS totalParcelas
        FROM parcelas p
        JOIN emprestimos e ON e.id = p.id_emprestimo
        WHERE p.status = 'Atrasada'
        ORDER BY p.data_vencimento ASC`
-    );
+      );
 
-    res.json(parcelas);
-  } catch (err) {
-    console.error("Erro ao buscar parcelas atrasadas:", err);
-    res.status(500).json({ error: "Erro ao buscar parcelas atrasadas" });
+      res.json(parcelas);
+    } catch (err) {
+      console.error("Erro ao buscar parcelas atrasadas:", err);
+      res.status(500).json({ error: "Erro ao buscar parcelas atrasadas" });
+    }
   }
-});
+);
 
-app.get("/parcelas/clientes-hoje", autenticar, atualizarParcelasMiddleware, async (req, res) => {
-  try {
-    const [result] = await pool.query(
-      `SELECT COUNT(DISTINCT e.cliente) AS totalClientesHoje
+app.get(
+  "/parcelas/clientes-hoje",
+  autenticar,
+  atualizarParcelasMiddleware,
+  async (req, res) => {
+    try {
+      const [result] = await pool.query(
+        `SELECT COUNT(DISTINCT e.cliente) AS totalClientesHoje
        FROM parcelas p
        JOIN emprestimos e ON p.id_emprestimo = e.id
        WHERE p.status != 'Pago'
          AND DATE(p.data_vencimento) = CURDATE()`
-    );
-    res.json({ totalClientesHoje: result[0].totalClientesHoje });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao buscar clientes com pagamentos para hoje" });
+      );
+      res.json({ totalClientesHoje: result[0].totalClientesHoje });
+    } catch (err) {
+      console.error(err);
+      res
+        .status(500)
+        .json({ error: "Erro ao buscar clientes com pagamentos para hoje" });
+    }
   }
-});
+);
 
-app.get("/parcelas/clientes-mes", autenticar, atualizarParcelasMiddleware, async (req, res) => {
-  try {
-    const [result] = await pool.query(
-      `SELECT COUNT(DISTINCT e.cliente) AS totalClientesMes
+app.get(
+  "/parcelas/clientes-mes",
+  autenticar,
+  atualizarParcelasMiddleware,
+  async (req, res) => {
+    try {
+      const [result] = await pool.query(
+        `SELECT COUNT(DISTINCT e.cliente) AS totalClientesMes
        FROM parcelas p
        JOIN emprestimos e ON p.id_emprestimo = e.id
        WHERE p.status != 'Pago'
          AND MONTH(p.data_vencimento) = MONTH(CURDATE())
          AND YEAR(p.data_vencimento) = YEAR(CURDATE())`
-    );
-    res.json({ totalClientesMes: result[0].totalClientesMes });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao buscar clientes com pagamentos neste mês" });
+      );
+      res.json({ totalClientesMes: result[0].totalClientesMes });
+    } catch (err) {
+      console.error(err);
+      res
+        .status(500)
+        .json({ error: "Erro ao buscar clientes com pagamentos neste mês" });
+    }
   }
-});
+);
 
 app.get("/parcelas/pagas-hoje", autenticar, async (req, res) => {
   try {
@@ -1240,25 +1391,39 @@ app.get("/emprestimos/total-emprestado", autenticar, async (req, res) => {
     res.json({ totalValorEmprestado: total });
   } catch (err) {
     console.error("Erro ao buscar empréstimos pendentes ou em atraso:", err);
-    res.status(500).json({ error: "Erro ao buscar empréstimos pendentes ou em atraso" });
+    res
+      .status(500)
+      .json({ error: "Erro ao buscar empréstimos pendentes ou em atraso" });
   }
 });
 
-
-app.get("/emprestimos/total-investimento-acumulado", autenticar, async (req, res) => {
-  try {
-    const [result] = await pool.query(`
+app.get(
+  "/emprestimos/total-investimento-acumulado",
+  autenticar,
+  async (req, res) => {
+    try {
+      const [result] = await pool.query(`
       SELECT SUM(valoremprestado) AS totalInvestimentoAcumulado
       FROM emprestimos
       WHERE statos IN ('Pendente', 'Em Atraso', 'Pago')
     `);
 
-    res.json({ totalInvestimentoAcumulado: result[0].totalInvestimentoAcumulado || 0 });
-  } catch (err) {
-    console.error("Erro ao buscar empréstimos Com Investimentos Acumulados:", err);
-    res.status(500).json({ error: "Erro ao buscar empréstimos Com Investimentos Acumulados" });
+      res.json({
+        totalInvestimentoAcumulado: result[0].totalInvestimentoAcumulado || 0,
+      });
+    } catch (err) {
+      console.error(
+        "Erro ao buscar empréstimos Com Investimentos Acumulados:",
+        err
+      );
+      res
+        .status(500)
+        .json({
+          error: "Erro ao buscar empréstimos Com Investimentos Acumulados",
+        });
+    }
   }
-});
+);
 
 app.get("/emprestimos/total-emprestado-mes", autenticar, async (req, res) => {
   try {
@@ -1269,10 +1434,14 @@ app.get("/emprestimos/total-emprestado-mes", autenticar, async (req, res) => {
         AND YEAR(dataemprestimo) = YEAR(CURDATE())
     `);
 
-    res.json({ totalValorEmprestadoMes: result[0].totalValorEmprestadoMes || 0 });
+    res.json({
+      totalValorEmprestadoMes: result[0].totalValorEmprestadoMes || 0,
+    });
   } catch (err) {
     console.error("Erro ao buscar total de empréstimos do mês:", err);
-    res.status(500).json({ error: "Erro ao buscar total de empréstimos do mês" });
+    res
+      .status(500)
+      .json({ error: "Erro ao buscar total de empréstimos do mês" });
   }
 });
 
@@ -1284,10 +1453,14 @@ app.get("/emprestimos/total-emprestado-hoje", autenticar, async (req, res) => {
       WHERE DATE(dataemprestimo) = CURDATE()
     `);
 
-    res.json({ totalValorEmprestadoHoje: result[0].totalValorEmprestadoHoje || 0 });
+    res.json({
+      totalValorEmprestadoHoje: result[0].totalValorEmprestadoHoje || 0,
+    });
   } catch (err) {
     console.error("Erro ao buscar total de empréstimos de hoje:", err);
-    res.status(500).json({ error: "Erro ao buscar total de empréstimos de hoje" });
+    res
+      .status(500)
+      .json({ error: "Erro ao buscar total de empréstimos de hoje" });
   }
 });
 
@@ -1309,9 +1482,12 @@ app.get("/emprestimos/lucro-total-a-receber", autenticar, async (req, res) => {
   }
 });
 
-app.get("/emprestimos/lucro-total-a-receber-mes", autenticar, async (req, res) => {
-  try {
-    const [result] = await pool.query(`
+app.get(
+  "/emprestimos/lucro-total-a-receber-mes",
+  autenticar,
+  async (req, res) => {
+    try {
+      const [result] = await pool.query(`
       SELECT 
         SUM(( (e.valorpagar - e.valoremprestado) / e.parcelas )) AS lucroTotalAReceberMes
       FROM emprestimos e
@@ -1322,16 +1498,22 @@ app.get("/emprestimos/lucro-total-a-receber-mes", autenticar, async (req, res) =
         AND YEAR(p.data_vencimento) = YEAR(CURDATE())
     `);
 
-    res.json({ lucroTotalAReceberMes: result[0].lucroTotalAReceberMes || 0 });
-  } catch (err) {
-    console.error("Erro ao calcular lucro total a receber do mês:", err);
-    res.status(500).json({ error: "Erro ao calcular lucro total a receber do mês" });
+      res.json({ lucroTotalAReceberMes: result[0].lucroTotalAReceberMes || 0 });
+    } catch (err) {
+      console.error("Erro ao calcular lucro total a receber do mês:", err);
+      res
+        .status(500)
+        .json({ error: "Erro ao calcular lucro total a receber do mês" });
+    }
   }
-});
+);
 
-app.get("/emprestimos/lucro-total-recebido-mes", autenticar, async (req, res) => {
-  try {
-    const [result] = await pool.query(`
+app.get(
+  "/emprestimos/lucro-total-recebido-mes",
+  autenticar,
+  async (req, res) => {
+    try {
+      const [result] = await pool.query(`
       SELECT 
         SUM(( (e.valorpagar - e.valoremprestado) / e.parcelas )) AS totalLucroARecebidoMes
       FROM emprestimos e
@@ -1341,13 +1523,17 @@ app.get("/emprestimos/lucro-total-recebido-mes", autenticar, async (req, res) =>
         AND YEAR(p.data_pagamento) = YEAR(CURDATE())
     `);
 
-    res.json({ totalLucroARecebidoMes: result[0].totalLucroARecebidoMes || 0 });
-  } catch (err) {
-    console.error("Erro ao calcular lucro total recebido do mês:", err);
-    res.status(500).json({ error: "Erro ao calcular lucro total recebido do mês" });
+      res.json({
+        totalLucroARecebidoMes: result[0].totalLucroARecebidoMes || 0,
+      });
+    } catch (err) {
+      console.error("Erro ao calcular lucro total recebido do mês:", err);
+      res
+        .status(500)
+        .json({ error: "Erro ao calcular lucro total recebido do mês" });
+    }
   }
-});
-
+);
 
 app.patch("/parcelas/atualizar-atrasadas", autenticar, async (req, res) => {
   try {
