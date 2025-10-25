@@ -672,13 +672,7 @@ app.post("/emprestimos", autenticar, async (req, res) => {
     obs,
   } = req.body;
 
-  if (
-    !cliente ||
-    !valoremprestado ||
-    !valorpagar ||
-    !parcelas ||
-    !dataemprestimo
-  ) {
+  if (!cliente || !valoremprestado || !valorpagar || !parcelas || !dataemprestimo) {
     return res.status(400).json({ error: "Todos os campos são obrigatórios." });
   }
 
@@ -693,24 +687,16 @@ app.post("/emprestimos", autenticar, async (req, res) => {
     }
 
     const clienteId = clienteExistente[0].id;
-    const hoje = hojeEmSP();
-    const dataBase =
-      DateTime.fromISO(dataemprestimo).setZone("America/Sao_Paulo");
+
+    const hoje = DateTime.now().setZone("America/Sao_Paulo").startOf("day");
+    const dataBase = DateTime.fromISO(dataemprestimo).setZone("America/Sao_Paulo");
 
     const statusEmprestimo = "Pendente";
 
     const [result] = await pool.query(
       `INSERT INTO emprestimos (cliente, valoremprestado, valorpagar, parcelas, dataemprestimo, obs, statos)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        cliente,
-        valoremprestado,
-        valorpagar,
-        parcelas,
-        dataemprestimo,
-        obs || "",
-        statusEmprestimo,
-      ]
+      [cliente, valoremprestado, valorpagar, parcelas, dataemprestimo, obs || "", statusEmprestimo]
     );
 
     const emprestimoId = result.insertId;
@@ -718,21 +704,14 @@ app.post("/emprestimos", autenticar, async (req, res) => {
     const parcelasPromises = [];
 
     for (let i = 1; i <= parcelas; i++) {
-      const dataVencimento = dataBase.plus({ months: i });
-      dataVencimento.setMonth(dataBase.getMonth() + i);
+      const dataVencimento = dataBase.plus({ months: i }).startOf("day");
       const statusParcela = dataVencimento < hoje ? "Atrasada" : "Pendente";
 
       parcelasPromises.push(
         pool.query(
           `INSERT INTO parcelas (id_emprestimo, numero_parcela, valor_parcela, data_vencimento, status)
            VALUES (?, ?, ?, ?, ?)`,
-          [
-            emprestimoId,
-            i,
-            valorParcela.toFixed(2),
-            dataVencimento.toISOString().split("T")[0],
-            statusParcela,
-          ]
+          [emprestimoId, i, valorParcela.toFixed(2), dataVencimento.toISODate(), statusParcela]
         )
       );
     }
@@ -743,13 +722,11 @@ app.post("/emprestimos", autenticar, async (req, res) => {
       `SELECT COUNT(*) AS qtd FROM parcelas WHERE id_emprestimo = ? AND status = 'Atrasada'`,
       [emprestimoId]
     );
+
     if (temAtraso[0].qtd > 0) {
-      await pool.query(
-        `UPDATE emprestimos SET statos = 'Em Atraso' WHERE id = ?`,
-        [emprestimoId]
-      );
+      await pool.query(`UPDATE emprestimos SET statos = 'Em Atraso' WHERE id = ?`, [emprestimoId]);
     }
-    const agora = dataHoraEmSP();
+
     await pool.query(
       `
       UPDATE clientes c
@@ -776,8 +753,8 @@ app.post("/emprestimos", autenticar, async (req, res) => {
             AND p.data_vencimento < ?
         )
       WHERE c.id = ?
-    `,
-      [hoje, clienteId]
+      `,
+      [hoje.toISODate(), clienteId]
     );
 
     const [novoEmprestimo] = await pool.query(
@@ -791,6 +768,7 @@ app.post("/emprestimos", autenticar, async (req, res) => {
     res.status(500).json({ error: "Erro ao criar empréstimo." });
   }
 });
+
 
 app.get("/clientes/stats/:id", autenticar, async (req, res) => {
   const clienteId = req.params.id;
