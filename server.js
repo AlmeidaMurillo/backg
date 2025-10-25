@@ -5,6 +5,21 @@ const jwt = require("jsonwebtoken");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const cron = require("node-cron");
+const { DateTime } = require("luxon");
+
+const agoraSP = DateTime.now().setZone("America/Sao_Paulo");
+
+function agoraEmSP() {
+  return DateTime.now().setZone("America/Sao_Paulo");
+}
+
+function hojeEmSP() {
+  return agoraEmSP().toFormat("yyyy-MM-dd");
+}
+
+function dataHoraEmSP() {
+  return agoraEmSP().toFormat("yyyy-MM-dd HH:mm:ss");
+}
 
 dotenv.config();
 const app = express();
@@ -31,58 +46,100 @@ let atualizandoParcelas = false;
 
 async function atualizarParcelasAtrasadas() {
   if (atualizandoParcelas) return;
-
   atualizandoParcelas = true;
 
   try {
     const hoje = new Date().toISOString().split("T")[0];
 
     await pool.query(
-      `UPDATE parcelas 
-       SET status = 'Atrasada' 
-       WHERE status = 'Pendente' AND data_vencimento < ?`,
+      `
+      UPDATE parcelas 
+      SET status = 'Atrasada'
+      WHERE status = 'Pendente' AND data_vencimento < ?
+    `,
       [hoje]
     );
 
-    await pool.query(
-      `UPDATE emprestimos e
-       JOIN parcelas p ON e.id = p.id_emprestimo
-       SET e.statos = 'Em Atraso'
-       WHERE p.status = 'Atrasada'`
-    );
+    const [novasAtrasadas] = await pool.query(`
+      SELECT DISTINCT e.cliente
+      FROM parcelas p
+      JOIN emprestimos e ON p.id_emprestimo = e.id
+      WHERE p.status = 'Atrasada' AND p.contabilizada_atraso = 0
+    `);
 
-    await pool.query(
-      `UPDATE clientes c
-       JOIN emprestimos e ON e.cliente = c.nome
-       JOIN parcelas p ON p.id_emprestimo = e.id
-       SET c.atrasos = (
-         SELECT COUNT(*)
-         FROM parcelas p2
-         JOIN emprestimos e2 ON p2.id_emprestimo = e2.id
-         WHERE e2.cliente = c.nome AND p2.status = 'Atrasada'
-       )`
-    );
+    for (const { cliente } of novasAtrasadas) {
+      await pool.query(
+        `
+        UPDATE clientes
+        SET atrasos = atrasos + 1
+        WHERE nome = ?
+      `,
+        [cliente]
+      );
+    }
 
-    await pool.query(
-      `UPDATE clientes c
-       JOIN emprestimos e ON e.cliente = c.nome
-       SET c.emprestimos_atrasados = (
-         SELECT COUNT(DISTINCT e2.id)
-         FROM emprestimos e2
-         JOIN parcelas p2 ON p2.id_emprestimo = e2.id
-         WHERE e2.cliente = c.nome AND p2.status = 'Atrasada'
-       )`
-    );
+    await pool.query(`
+      UPDATE parcelas
+      SET contabilizada_atraso = 1
+      WHERE status = 'Atrasada' AND contabilizada_atraso = 0
+    `);
 
-    console.log("Parcelas e clientes atrasados atualizados automaticamente.");
+    await pool.query(`
+      UPDATE emprestimos e
+      JOIN parcelas p ON e.id = p.id_emprestimo
+      SET e.statos = 'Em Atraso'
+      WHERE p.status = 'Atrasada'
+    `);
+
+    await pool.query(`
+      UPDATE emprestimos e
+      SET e.statos = 'Quitado'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM parcelas p
+        WHERE p.id_emprestimo = e.id
+        AND p.status IN ('Pendente', 'Atrasada')
+      )
+    `);
+
+    const [clientesSemAtrasos] = await pool.query(`
+      SELECT c.nome
+      FROM clientes c
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM emprestimos e
+        JOIN parcelas p ON p.id_emprestimo = e.id
+        WHERE e.cliente = c.nome
+        AND p.status = 'Atrasada'
+      ) AND c.atrasos > 0
+    `);
+
+    for (const { nome } of clientesSemAtrasos) {
+      await pool.query(
+        `
+        UPDATE clientes
+        SET atrasos = GREATEST(atrasos - 1, 0)
+        WHERE nome = ?
+      `,
+        [nome]
+      );
+    }
+
+    console.log(
+      "✅ Parcelas e clientes atrasados atualizados automaticamente."
+    );
   } catch (err) {
-    console.error("Erro ao atualizar parcelas atrasadas automaticamente:", err);
+    console.error(
+      "❌ Erro ao atualizar parcelas atrasadas automaticamente:",
+      err
+    );
   } finally {
     setTimeout(() => {
       atualizandoParcelas = false;
     }, 500);
   }
 }
+
+atualizarParcelasAtrasadas();
 
 cron.schedule("1 0 * * *", () => {
   atualizarParcelasAtrasadas();
@@ -636,8 +693,9 @@ app.post("/emprestimos", autenticar, async (req, res) => {
     }
 
     const clienteId = clienteExistente[0].id;
-    const hoje = new Date();
-    const dataEmp = new Date(dataemprestimo);
+    const hoje = hojeEmSP();
+    const dataBase =
+      DateTime.fromISO(dataemprestimo).setZone("America/Sao_Paulo");
 
     const statusEmprestimo = "Pendente";
 
@@ -657,11 +715,10 @@ app.post("/emprestimos", autenticar, async (req, res) => {
 
     const emprestimoId = result.insertId;
     const valorParcela = parseFloat(valorpagar) / parseInt(parcelas);
-    const dataBase = new Date(dataemprestimo);
     const parcelasPromises = [];
 
     for (let i = 1; i <= parcelas; i++) {
-      const dataVencimento = new Date(dataBase);
+      const dataVencimento = dataBase.plus({ months: i });
       dataVencimento.setMonth(dataBase.getMonth() + i);
       const statusParcela = dataVencimento < hoje ? "Atrasada" : "Pendente";
 
@@ -692,7 +749,7 @@ app.post("/emprestimos", autenticar, async (req, res) => {
         [emprestimoId]
       );
     }
-
+    const agora = dataHoraEmSP();
     await pool.query(
       `
       UPDATE clientes c
@@ -716,19 +773,11 @@ app.post("/emprestimos", autenticar, async (req, res) => {
           JOIN parcelas p ON e.id = p.id_emprestimo
           WHERE e.cliente = c.nome
             AND p.status = 'Atrasada'
-            AND p.data_vencimento < NOW()
-        ),
-        atrasos = (
-          SELECT COUNT(*)
-          FROM parcelas p
-          JOIN emprestimos e ON e.id = p.id_emprestimo
-          WHERE e.cliente = c.nome
-            AND p.status = 'Atrasada'
-            AND p.data_vencimento < NOW()
+            AND p.data_vencimento < ?
         )
       WHERE c.id = ?
     `,
-      [clienteId]
+      [hoje, clienteId]
     );
 
     const [novoEmprestimo] = await pool.query(
@@ -747,6 +796,7 @@ app.get("/clientes/stats/:id", autenticar, async (req, res) => {
   const clienteId = req.params.id;
 
   try {
+    const hoje = dataHoraEmSP();
     const [stats] = await pool.query(
       `
       SELECT 
@@ -788,14 +838,14 @@ app.get("/clientes/stats/:id", autenticar, async (req, res) => {
           JOIN parcelas p ON e.id = p.id_emprestimo
           WHERE e.cliente = c.nome
           AND p.status = 'Atrasada'
-          AND p.data_vencimento < NOW()
+          AND p.data_vencimento < ?
         ) AS emprestimos_atrasados
 
 
       FROM clientes c
       WHERE c.id = ?
     `,
-      [clienteId]
+      [hoje, clienteId]
     );
 
     if (stats.length === 0) {
@@ -1012,9 +1062,10 @@ app.patch("/parcelas/:idParcela/status", autenticar, async (req, res) => {
     let statusAtualizadoParcela;
 
     if (status === "Pago") {
+      const hoje = dataHoraEmSP();
       await pool.query(
-        "UPDATE parcelas SET status = ?, data_pagamento = NOW() WHERE id = ?",
-        [status, idParcela]
+        "UPDATE parcelas SET status = ?, data_pagamento = ? WHERE id = ?",
+        [status, hoje, idParcela]
       );
       statusAtualizadoParcela = "Pago";
     } else {
@@ -1027,10 +1078,10 @@ app.patch("/parcelas/:idParcela/status", autenticar, async (req, res) => {
         return res.status(404).json({ error: "Parcela não encontrada." });
       }
 
-      const dataVencimento = new Date(rows[0].data_vencimento);
-      const hoje = new Date();
-      dataVencimento.setHours(0, 0, 0, 0);
-      hoje.setHours(0, 0, 0, 0);
+      const dataVencimento = DateTime.fromISO(rows[0].data_vencimento, {
+        zone: "America/Sao_Paulo",
+      }).startOf("day");
+      const hoje = agoraEmSP().startOf("day");
 
       statusAtualizadoParcela = dataVencimento < hoje ? "Atrasada" : "Pendente";
 
@@ -1177,17 +1228,6 @@ app.delete("/emprestimos/:id", autenticar, async (req, res) => {
     if (emprestimo.statos === "Pago") {
       novosValores.emprestimos_pagos = Math.max(
         cliente.emprestimos_pagos - 1,
-        0
-      );
-    }
-
-    const parcelasAtrasadas = parcelas.filter(
-      (p) => p.status === "Atrasada"
-    ).length;
-    if (parcelasAtrasadas > 0) {
-      novosValores.atrasos = Math.max(cliente.atrasos - parcelasAtrasadas, 0);
-      novosValores.emprestimos_atrasados = Math.max(
-        cliente.emprestimos_atrasados - 1,
         0
       );
     }
@@ -1416,11 +1456,9 @@ app.get(
         "Erro ao buscar empréstimos Com Investimentos Acumulados:",
         err
       );
-      res
-        .status(500)
-        .json({
-          error: "Erro ao buscar empréstimos Com Investimentos Acumulados",
-        });
+      res.status(500).json({
+        error: "Erro ao buscar empréstimos Com Investimentos Acumulados",
+      });
     }
   }
 );
@@ -1537,7 +1575,7 @@ app.get(
 
 app.patch("/parcelas/atualizar-atrasadas", autenticar, async (req, res) => {
   try {
-    const hoje = new Date().toISOString().split("T")[0];
+    const hoje = hojeEmSP();
 
     const [parcelasAtualizadas] = await pool.query(
       `UPDATE parcelas 
